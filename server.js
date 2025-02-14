@@ -1,28 +1,28 @@
 const express = require('express');
+const bodyParser = require('body-parser');
 const cors = require('cors');
-require('dotenv').config();
 
 const app = express();
-app.use(express.json()); // Middleware to parse JSON request bodies
-app.use(cors()); // Enable CORS for external requests
-
-// Webhook endpoint to handle POST requests
-app.post('/webhook', (req, res) => {
-    console.log('Webhook received:', req.body);
-
-    // Respond with success message
-    res.status(200).json({ message: "Webhook received successfully!" });
-});
-
-// Default route to check if the server is running
-app.get('/', (req, res) => {
-    res.send("Slack Webhook Proxy is running!");
-});
-
-// Define the PORT (from environment variables or default to 10000)
 const PORT = process.env.PORT || 10000;
 
-// Start the Express server
+// Enable CORS to allow external requests
+app.use(cors());
+
+// Parse incoming JSON requests
+app.use(bodyParser.json());
+
+// Webhook Route
+app.post('/webhook', (req, res) => {
+    console.log('Webhook received:', req.body);
+    res.status(200).json({ message: 'Webhook received successfully!' });
+});
+
+// Root Route (for testing if server is running)
+app.get('/', (req, res) => {
+    res.send('Slack Webhook Proxy is live!');
+});
+
+// Start the server
 app.listen(PORT, () => {
-    console.log(`🚀 Proxy Server running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
