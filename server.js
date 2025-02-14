@@ -1,28 +1,24 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
+const cors = require('cors'); // Allow CORS if needed
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Enable CORS to allow external requests
-app.use(cors());
+app.use(cors());  // Enable CORS
+app.use(express.json());  // Enable JSON parsing
 
-// Parse incoming JSON requests
-app.use(bodyParser.json());
-
-// Webhook Route
-app.post('/webhook', (req, res) => {
-    console.log('Webhook received:', req.body);
-    res.status(200).json({ message: 'Webhook received successfully!' });
+// Webhook endpoint to handle POST requests
+app.post('/', (req, res) => {
+    console.log('Received Webhook:', req.body);
+    res.status(200).json({ message: 'Webhook received successfully' });
 });
 
-// Root Route (for testing if server is running)
-app.get('/', (req, res) => {
-    res.send('Slack Webhook Proxy is live!');
+// Catch-all for unknown routes
+app.use((req, res) => {
+    res.status(404).json({ error: 'Route not found' });
 });
 
 // Start the server
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
