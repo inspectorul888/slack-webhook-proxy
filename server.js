@@ -1,81 +1,122 @@
+// Import necessary modules
 const express = require('express');
 const axios = require('axios');
+const cors = require('cors');
 require('dotenv').config();
 
+// Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-// Middleware to parse JSON & URL-encoded bodies
+// Middleware
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors());  // Enable CORS for Devi AI
 
-// Slack interactive components (buttons, shortcuts) -> /slack/actions
-app.post('/slack/actions', async (req, res) => {
-    console.log("🔹 Received Slack action:", req.body);
+// ✅ Webhook for Receiving Leads from Devi AI
+app.post('/proxy-webhook', async (req, res) => {
+    console.log("🔹 Webhook received from Devi AI:", req.body);
 
-    // Slack sends payload as a URL-encoded string, so we need to parse it
-    const payload = JSON.parse(req.body.payload);
-    
-    if (payload.type === "block_actions") {
-        const action = payload.actions[0];
-
-        // Example: Handle button clicks
-        if (action.action_id === "refresh_data") {
-            res.json({ text: "🔄 Fetching fresh data from Devi AI..." });
-
-            // Trigger manual Devi AI fetch
-            try {
-                const deviResponse = await axios.get(process.env.DEVI_AI_API_URL || "https://dummy-devi-ai-api.com");
-                console.log("✅ Devi AI Data Fetched:", deviResponse.data);
-                
-                // Send data back to Slack
-                await axios.post(payload.response_url, {
-                    text: "✅ Data pulled successfully!",
-                    blocks: [
-                        {
-                            "type": "section",
-                            "text": { "type": "mrkdwn", "text": `*Latest Leads:*\n\`\`\`${JSON.stringify(deviResponse.data, null, 2)}\`\`\`` }
-                        }
-                    ]
-                });
-
-            } catch (error) {
-                console.error("❌ Error pulling Devi AI data:", error);
-                await axios.post(payload.response_url, { text: "⚠️ Failed to fetch data from Devi AI." });
-            }
-        } else {
-            res.json({ text: "🛑 Unknown action received." });
-        }
-    } else {
-        res.json({ text: "🛑 Unsupported interaction type." });
+    if (!req.body.items || req.body.items.length === 0) {
+        return res.status(400).json({ success: false, message: "⚠️ No valid lead data received." });
     }
-});
 
-// Manual Pull Data from Devi AI -> /pull-devi-ai
-app.get('/pull-devi-ai', async (req, res) => {
-    console.log("🔹 Manual pull request received");
+    // Extract lead details
+    const lead = req.body.items[0];  // First item in the array
+    const slackMessage = {
+        text: `🚀 *New Lead from Devi AI!*`,
+        attachments: [
+            {
+                color: "#36a64f",
+                fields: [
+                    { title: "👤 Author", value: lead.authorName, short: true },
+                    { title: "📌 Content", value: lead.content || "No content", short: false },
+                    { title: "🔗 Post URL", value: `<${lead.url}|View Post>`, short: false },
+                    { title: "👍 Likes", value: lead.likes.toString(), short: true },
+                    { title: "📅 Posted At", value: lead.postedAt, short: true }
+                ]
+            }
+        ]
+    };
 
     try {
-        const response = await axios.get(process.env.DEVI_AI_API_URL || "https://dummy-devi-ai-api.com");
-        console.log("✅ Data from Devi AI:", response.data);
-
-        res.json({
-            success: true,
-            message: "✅ Successfully fetched data from Devi AI",
-            data: response.data
-        });
+        const slackResponse = await axios.post(process.env.SLACK_WEBHOOK_URL, slackMessage);
+        console.log("✅ Sent to Slack:", slackResponse.data);
+        res.json({ success: true, message: "✅ Webhook processed & sent to Slack." });
     } catch (error) {
-        console.error("❌ Error fetching Devi AI data:", error);
-        res.status(500).json({ success: false, message: "⚠️ Error fetching Devi AI data" });
+        console.error("❌ Error forwarding to Slack:", error);
+        res.status(500).json({ success: false, message: "⚠️ Failed to forward to Slack." });
     }
 });
 
-// Root Route
-app.get('/', (req, res) => {
-    res.send('✅ Slack Webhook Proxy is Running');
+// ✅ Manual Data Pull from Devi AI (Triggered by Slack Button)
+app.post('/pull-devi-ai', async (req, res) => {
+    console.log("🔹 Pull request received from Slack.");
+
+    const DEVI_AI_API_URL = process.env.DEVI_AI_API_URL;  // Fetch from environment variable
+    if (!DEVI_AI_API_URL) {
+        return res.status(500).json({ success: false, message: "⚠️ Devi AI API URL not configured." });
+    }
+
+    try {
+        const deviResponse = await axios.get(DEVI_AI_API_URL);
+        const leads = deviResponse.data.items || [];
+
+        if (leads.length === 0) {
+            return res.json({ success: true, message: "⚠️ No new leads found." });
+        }
+
+        // Send leads to Slack
+        const slackMessages = leads.map(lead => ({
+            text: `🚀 *Manual Pull: New Lead from Devi AI!*`,
+            attachments: [
+                {
+                    color: "#36a64f",
+                    fields: [
+                        { title: "👤 Author", value: lead.authorName, short: true },
+                        { title: "📌 Content", value: lead.content || "No content", short: false },
+                        { title: "🔗 Post URL", value: `<${lead.url}|View Post>`, short: false },
+                        { title: "👍 Likes", value: lead.likes.toString(), short: true },
+                        { title: "📅 Posted At", value: lead.postedAt, short: true }
+                    ]
+                }
+            ]
+        }));
+
+        for (const msg of slackMessages) {
+            await axios.post(process.env.SLACK_WEBHOOK_URL, msg);
+        }
+
+        res.json({ success: true, message: `✅ Pulled ${leads.length} leads from Devi AI & sent to Slack.` });
+
+    } catch (error) {
+        console.error("❌ Error pulling data from Devi AI:", error);
+        res.status(500).json({ success: false, message: "⚠️ Failed to fetch data from Devi AI." });
+    }
 });
 
-// Start the server
+// ✅ Slack Interactive Buttons & Shortcuts
+app.post('/slack/actions', async (req, res) => {
+    console.log("🔹 Slack interaction received:", req.body);
+
+    const payload = JSON.parse(req.body.payload);
+    const actionId = payload.actions[0]?.action_id || "unknown_action";
+
+    if (actionId === "pull_devi_ai") {
+        // Manually trigger data pull
+        axios.post(`${process.env.BASE_URL}/pull-devi-ai`)
+            .then(() => res.json({ text: "✅ Fetching latest leads from Devi AI..." }))
+            .catch(() => res.json({ text: "⚠️ Error triggering data fetch." }));
+    } else {
+        res.json({ text: "⚠️ Unrecognized action." });
+    }
+});
+
+// ✅ Home Route (For Testing)
+app.get('/', (req, res) => {
+    res.send("✅ Slack Webhook Proxy is Running!");
+});
+
+// Start Server
 app.listen(PORT, () => {
-    console.log(`🚀 Server is running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
