@@ -1,95 +1,81 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const axios = require('axios');
-const dotenv = require('dotenv');
-
-dotenv.config();
+require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// Middleware to parse JSON & URL-encoded bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Load environment variables
-const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
-const DEVI_AI_API_URL = process.env.DEVI_AI_API_URL;
-
-// 🚀 Root Endpoint (Health Check)
-app.get('/', (req, res) => {
-    res.send('Slack Webhook Proxy is Running!');
-});
-
-// 📩 Incoming Webhook Handler (Slack)
-app.post('/slack/webhook', async (req, res) => {
-    try {
-        const data = req.body;
-        
-        // Format message for Slack
-        const slackMessage = {
-            text: `*New Webhook Data Received:*\n\`\`\`${JSON.stringify(data, null, 2)}\`\`\``
-        };
-
-        // Send message to Slack Webhook
-        await axios.post(SLACK_WEBHOOK_URL, slackMessage);
-
-        res.status(200).send({ success: true, message: 'Webhook processed' });
-    } catch (error) {
-        console.error('Error processing webhook:', error);
-        res.status(500).send({ success: false, error: 'Internal Server Error' });
-    }
-});
-
-// 🎯 Slack Interactivity & Shortcuts
+// Slack interactive components (buttons, shortcuts) -> /slack/actions
 app.post('/slack/actions', async (req, res) => {
-    try {
-        const payload = JSON.parse(req.body.payload);
+    console.log("🔹 Received Slack action:", req.body);
 
-        if (payload.type === 'block_actions') {
-            const action = payload.actions[0];
+    // Slack sends payload as a URL-encoded string, so we need to parse it
+    const payload = JSON.parse(req.body.payload);
+    
+    if (payload.type === "block_actions") {
+        const action = payload.actions[0];
 
-            if (action.action_id === 'pull_devi_ai') {
-                // Call Devi AI API
-                const response = await axios.get(DEVI_AI_API_URL);
-                const deviData = response.data;
+        // Example: Handle button clicks
+        if (action.action_id === "refresh_data") {
+            res.json({ text: "🔄 Fetching fresh data from Devi AI..." });
 
-                // Send response back to Slack
-                const slackMessage = {
-                    text: `*📡 Pulled Latest Data from Devi AI:*\n\`\`\`${JSON.stringify(deviData, null, 2)}\`\`\``
-                };
+            // Trigger manual Devi AI fetch
+            try {
+                const deviResponse = await axios.get(process.env.DEVI_AI_API_URL || "https://dummy-devi-ai-api.com");
+                console.log("✅ Devi AI Data Fetched:", deviResponse.data);
+                
+                // Send data back to Slack
+                await axios.post(payload.response_url, {
+                    text: "✅ Data pulled successfully!",
+                    blocks: [
+                        {
+                            "type": "section",
+                            "text": { "type": "mrkdwn", "text": `*Latest Leads:*\n\`\`\`${JSON.stringify(deviResponse.data, null, 2)}\`\`\`` }
+                        }
+                    ]
+                });
 
-                await axios.post(SLACK_WEBHOOK_URL, slackMessage);
+            } catch (error) {
+                console.error("❌ Error pulling Devi AI data:", error);
+                await axios.post(payload.response_url, { text: "⚠️ Failed to fetch data from Devi AI." });
             }
+        } else {
+            res.json({ text: "🛑 Unknown action received." });
         }
-
-        res.status(200).send();
-    } catch (error) {
-        console.error('Error processing Slack action:', error);
-        res.status(500).send({ success: false, error: 'Internal Server Error' });
+    } else {
+        res.json({ text: "🛑 Unsupported interaction type." });
     }
 });
 
-// 🔄 Manual Data Pull from Devi AI (On-Demand)
+// Manual Pull Data from Devi AI -> /pull-devi-ai
 app.get('/pull-devi-ai', async (req, res) => {
+    console.log("🔹 Manual pull request received");
+
     try {
-        const response = await axios.get(DEVI_AI_API_URL);
-        const deviData = response.data;
+        const response = await axios.get(process.env.DEVI_AI_API_URL || "https://dummy-devi-ai-api.com");
+        console.log("✅ Data from Devi AI:", response.data);
 
-        // Format message for Slack
-        const slackMessage = {
-            text: `*🔄 Pulled Latest Leads from Devi AI:*\n\`\`\`${JSON.stringify(deviData, null, 2)}\`\`\``
-        };
-
-        await axios.post(SLACK_WEBHOOK_URL, slackMessage);
-
-        res.status(200).send({ success: true, message: 'Pulled data from Devi AI', data: deviData });
+        res.json({
+            success: true,
+            message: "✅ Successfully fetched data from Devi AI",
+            data: response.data
+        });
     } catch (error) {
-        console.error('Error pulling data from Devi AI:', error);
-        res.status(500).send({ success: false, error: 'Failed to fetch Devi AI data' });
+        console.error("❌ Error fetching Devi AI data:", error);
+        res.status(500).json({ success: false, message: "⚠️ Error fetching Devi AI data" });
     }
 });
 
-// 🚀 Start the Server
+// Root Route
+app.get('/', (req, res) => {
+    res.send('✅ Slack Webhook Proxy is Running');
+});
+
+// Start the server
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`🚀 Server is running on port ${PORT}`);
 });
