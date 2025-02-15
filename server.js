@@ -7,23 +7,36 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 
-// Define keywords that should trigger sending to Slack
-const KEYWORDS = ["study", "UK", "funded", "university", "scholarship"]; // Add relevant words
+// Define your relevant keywords (must match those in Devi AI)
+const RELEVANT_KEYWORDS = ["study", "UK", "university", "scholarship", "funded"]; // Modify these as needed
 
 app.use(express.json());
 app.use(cors());
 
 app.post("/proxy-webhook", async (req, res) => {
     try {
-        console.log("Webhook received:", req.body);
-        let filteredItems = req.body.items.filter(item => 
-            KEYWORDS.some(keyword => item.content.toLowerCase().includes(keyword.toLowerCase()))
+        console.log("Webhook received:", JSON.stringify(req.body, null, 2));
+
+        // Filter items based on keywords
+        let filteredItems = req.body.items.filter(item =>
+            item.keywords.some(keyword => 
+                RELEVANT_KEYWORDS.includes(keyword.toLowerCase())
+            )
         );
 
         if (filteredItems.length > 0) {
-            await axios.post(SLACK_WEBHOOK_URL, { 
-                text: `Filtered Leads: ${JSON.stringify(filteredItems, null, 2)}` 
-            });
+            let slackMessages = filteredItems.map(item => `
+📌 *New Lead from ${item.provider.toUpperCase()}*
+👤 *Author:* ${item.authorName}  
+🔗 *Post URL:* <${item.url}|Click Here>  
+📢 *Group:* ${item.groupName || "N/A"}  
+💬 *Content:* "${item.content}"  
+👍 *Likes:* ${item.likes}  
+🕒 *Posted At:* ${item.postedAt}  
+            `).join("\n\n");
+
+            // Send filtered results to Slack
+            await axios.post(SLACK_WEBHOOK_URL, { text: slackMessages });
         }
 
         res.json({ success: true, message: "Processed webhook data" });
@@ -33,6 +46,7 @@ app.post("/proxy-webhook", async (req, res) => {
     }
 });
 
+// Health check route
 app.get("/", (req, res) => {
     res.send("Slack Webhook Proxy is live!");
 });
