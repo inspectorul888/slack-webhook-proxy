@@ -15,32 +15,57 @@ app.use(bodyParser.json());
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 const DEVI_AI_API_URL = process.env.DEVI_AI_API_URL; // This needs to be provided when available
 
-// Add the keyword list from Devi AI
+// Add the extended keyword list from Devi AI
 const FILTER_KEYWORDS = [
   "study law in", "study construction management", "study hospitality management",
   "study professional policing", "study software engineering", "study accounting",
   "study project management", "study graphic design", "study law", "study marketing",
-  "project management", "accounting and finance", "study in northampton", 
-  "study in luton", "study in bradford", "study in scotland", "study in wales",
-  "study in england", "studiez ziua", "studiez seara", "construction management",
-  "digital marketing", "in cursul saptamanii", "studiez in weekend", "business management",
-  "uk scholarships", "uk student accommodation", "studiez in scotia", "studiez in leeds",
-  "studiez in birmingham", "studiez in leicester", "studiez in londra", "studying in coventry",
-  "studying in manchester", "studying in harrow", "studying in leeds", "studying in leicester",
-  "studying in birmingham", "studying in london", "study visa process", "how to apply",
-  "best universities for", "looking for university", "student visa help", "still apply for",
-  "uk university applications", "deadline for uk", "i need help", "still accepting applications",
-  "best uk universities", "anyone applied for", "for april intake", "for march intake",
-  "for october intake", "for june intake", "for may intake", "for february intake",
-  "for january intake", "for september intake", "urgent application", "to apply asap",
-  "need to apply", "de la facultate", "uk student finance", "international students",
-  "best places for", "anyone studying", "which is better", "uk student applications",
-  "best agency for", "for uk studies", "do you recommend", "which agency", "student visa",
-  "uk university", "apply uk", "cand pot studia", "cand incep universitatile", 
-  "cand incep facultatile", "unde sa studiez", "looking to study", "merg la universitate",
-  "merg la facultate", "university for migrants", "university for immigrants",
-  "best universities", "studiez", "study", "facultate", "facultate in uk", "studiez in anglia",
-  "cine face", "want to study", "vreau sa studiez"
+  "uk scholarships", "uk student accommodation", "student visa help", "still apply for",
+  "uk university applications", "best universities for", "best agency for", 
+  "for uk studies", "student finance uk", "student loan advice", "tuition fee loans",
+  "de interviu", "baza de interviu", "doar pe baza", "vrei la facultate", "interviu",
+  "pe baza de", "inscriere doar", "Interview-based admission", "Admission by interview",
+  "Easy university admission", "Quick admission process", "Grid exam required",
+  "English grid test", "Exam-based admission", "Fast-track admission", "Direct university entry",
+  "University interview needed", "No entry exam", "Simple admission process",
+  "Easy application process", "Fast enrollment process", "Interview for admission",
+  "University entry exam", "Admission no test", "Easy study access", "Quick study enrollment",
+  "Open university access", "alkaline water", "ionized water", "hydrogen-rich water",
+  "best drinking water", "hydration benefits", "electrolyzed water", "water purification",
+  "structured water", "antioxidant water", "alkaline diet", "anti-oxidation",
+  "anti-inflammation", "water detox", "cellular hydration", "energy boost", "improve sleep",
+  "reduce fatigue", "clear skin", "mental clarity", "joint pain relief",
+  "inflammation reduction", "oxidative stress relief", "chronic dehydration",
+  "improve digestion", "pH balance", "better hydration", "natural energy",
+  "healthy lifestyle", "detox solution", "water filter system", "hydration solution",
+  "advanced water technology", "business growth", "career change", "skill development",
+  "personal growth", "professional coaching", "business mentor", "goal setting",
+  "productivity boost", "time management", "career advancement", "mindset shift",
+  "overcome procrastination", "career transition", "job search help", "leadership skills",
+  "remote work tips", "business success", "startup advice", "entrepreneur mindset",
+  "university application", "study abroad", "UK universities", "student visa help",
+  "international student", "university admission", "course enrollment", "higher education",
+  "degree program", "college scholarship", "campus life", "university guide",
+  "online courses", "distance learning", "academic success", "study tips",
+  "exam preparation", "student accommodation", "tuition fees", "best universities",
+  "MBA program", "postgraduate courses", "undergraduate courses", "course deadlines",
+  "pain", "chronic pain", "fatigue", "tired all the time", "joint pain", "inflammation",
+  "headache", "migraine", "body aches", "swelling", "stiffness", "brain fog", "low energy",
+  "insomnia", "can’t sleep", "anxiety", "depression", "stressed out", "skin issues",
+  "eczema", "dry skin", "itchy skin", "digestive problems", "stomach pain", "bloating",
+  "acid reflux", "heartburn", "constipation", "diarrhea", "dehydration", "always thirsty",
+  "frequent urination", "muscle cramps", "weakness", "dizziness", "nausea",
+  "heart palpitations", "high blood pressure", "low blood pressure", "weight gain",
+  "weight loss", "obesity", "difficulty losing weight", "diabetes symptoms",
+  "blood sugar problems", "high cholesterol", "asthma attack", "breathing problems",
+  "shortness of breath", "coughing", "allergies", "sinus infection", "frequent colds",
+  "immune system problems", "autoimmune disease", "arthritis flare-up", "joint swelling",
+  "gout attack", "psoriasis outbreak", "eye problems", "blurry vision", "memory problems",
+  "forgetfulness", "lack of focus", "restless legs", "tingling sensation", "numbness",
+  "back pain", "neck pain", "shoulder pain", "poor circulation", "cold hands",
+  "cold feet", "stress eating", "poor appetite", "loss of appetite", "slow recovery",
+  "poor healing", "frequent infections", "weakness after exercise", "muscle soreness",
+  "exhaustion", "post-workout fatigue"
 ];
 
 // Function to check if a post contains any keyword
@@ -66,36 +91,6 @@ app.post("/proxy-webhook", async (req, res) => {
   } catch (error) {
     console.error("Error processing webhook:", error);
     res.status(500).send("Error processing webhook");
-  }
-});
-
-// ✅ Endpoint for Slack Interactivity (Button Clicks, etc.)
-app.post("/slack/actions", async (req, res) => {
-  console.log("Slack action received:", req.body);
-  res.status(200).send("Action received");
-});
-
-// ✅ Manual Pull Data from Devi AI
-app.get("/pull-devi-ai", async (req, res) => {
-  try {
-    if (!DEVI_AI_API_URL) {
-      return res.status(500).send("Devi AI API URL is missing in environment variables");
-    }
-
-    const response = await axios.get(DEVI_AI_API_URL);
-    const leads = response.data.items || [];
-    console.log("Manually pulled leads:", leads.length);
-
-    for (const lead of leads) {
-      if (containsKeyword(lead.content)) {
-        await sendToSlack(lead);
-      }
-    }
-
-    res.status(200).send("Manual Devi AI pull successful");
-  } catch (error) {
-    console.error("Error fetching Devi AI data:", error);
-    res.status(500).send("Error fetching Devi AI data");
   }
 });
 
